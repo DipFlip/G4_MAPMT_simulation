@@ -61,6 +61,7 @@ def is_in_groove(xo, yo, zo):
     """Returns True if the photon originates in a groove."""
     groove_width = 0.2 #mm
     groove_depth = 0.5 #mm
+    groove_depth = 1 #mm
     grooves = [18.25, 24.25, 30.25]
     for groove in grooves:
         if groove - groove_width < xo < groove + groove_width:
@@ -100,11 +101,11 @@ def root_to_dataframe(vid_array, x_array, y_array, x_origin, y_origin, z_origin,
             for x, y, xo, yo, zo, vid in zip(x_array[event], y_array[event], x_origin[event], y_origin[event], z_origin[event], vid_array[event]):
                 # print(f"vid:{vid}, xo {xo}, xbin: {get_scan_bin(xo,yo)[0]}, ybin: {get_scan_bin(xo,yo)[1]}, yo:{yo}")
                 if vid == 2:
-                    if not is_in_groove(xo, yo, zo):
-                        pixel = G4_coordinates2pixel(x,y)
-                        bin_number = get_scan_bin(xo, yo)
-                        if  1 <= pixel <= 64:
-                            photon_counts[bin_number, pixel-1] += 1
+                    # if not is_in_groove(xo, yo, zo):
+                    pixel = G4_coordinates2pixel(x,y)
+                    bin_number = get_scan_bin(xo, yo)
+                    if  1 <= pixel <= 64:
+                        photon_counts[bin_number, pixel-1] += 1
 
     # save as a dataframe
     print("Making dataframe...")
@@ -171,6 +172,7 @@ def plot_max_at_each_position():
     return maxes
 
 def calculate_multiplicity_at_each_position(threshold):
+    """returns a 2D array of multiplicities for each position"""
     mults = np.zeros((n_bins,n_bins))
     # mults = np.zeros((98,98))
     for xid, xbin in enumerate(bin_centers):
@@ -203,11 +205,14 @@ def plot_0_to_5(mults):
     thresh = np.transpose(list(mults.keys()))
     m_counts = np.zeros((len(thresh),6))
     for idt, t in enumerate(thresh):
-        for m in [1,2,3,4]:
-            m_counts[idt, m] = np.sum(mults[t] == m) / (48*48)
+        mults[t] = mults[t][5:35,5:35]
+    n_illuminated_bins = mults[thresh[0]].shape[0]
+    for idt, t in enumerate(thresh):
+        for m in [0,1,2,3,4]:
+            m_counts[idt, m] = np.sum(mults[t] == m) / (n_illuminated_bins*n_illuminated_bins)
             # m_counts[idt, m] = np.sum(ungrooved_mults_big[t] == m) / (24*24)
-        m_counts[idt, 0] = 1 - sum(m_counts[idt,:])
-        m_counts[idt, 5] = np.sum(mults[t] > 4) / (48*48)
+        # m_counts[idt, 0] = 1 - sum(m_counts[idt,:])
+        m_counts[idt, 5] = np.sum(mults[t] > 4) / (n_illuminated_bins*n_illuminated_bins)
     for multip_line, col in zip(np.transpose(m_counts[:,(0,-1)]), ['k','c']):
         ax1.semilogx(thresh, multip_line, color=col)
     for multip_line in np.transpose(m_counts[:,(1,2,3,4)]):
@@ -278,6 +283,9 @@ thresh3_old = np.arange(100,2001,100)
 ungrooved_mults = pickle.load( open('pickles/cent_ungrooved_mults.pkl', 'rb'))
 grooved_mapmt_side_half = pickle.load( open('pickles/new_halfgroove_mults_0.25.pkl', 'rb'))
 grooved_mapmt_side_all = pickle.load( open('pickles/new_allgroove_mults_0.25.pkl', 'rb'))
+filtered_grooved_mapmt_side_all_mults = pickle.load( open('pickles/filtered_allgroove_mults_0.20.pkl', 'rb'))
+filtered_grooved_mapmt_side_half_mults = pickle.load( open('pickles/filtered_halfgroove_mults_0.20.pkl', 'rb'))
+filtered_nogrooved_mapmt_rachel_mults = pickle.load( open('pickles/filtered_nogroove_rachel_mults_0.20.pkl', 'rb'))
 grooved_mults = pickle.load( open('pickles/cent_grooved_mults.pkl', 'rb'))
 corner_grooved_mults = pickle.load( open('pickles/corn_ungrooved_mults.pkl', 'rb'))
 grooved_ref_mults = pickle.load( open('pickles/grooved_ref_mults.pkl', 'rb'))
