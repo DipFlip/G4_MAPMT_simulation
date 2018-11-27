@@ -204,15 +204,16 @@ def plot_0_to_5(mults):
     fig2, ax2 = plt.subplots()
     thresh = np.transpose(list(mults.keys()))
     m_counts = np.zeros((len(thresh),6))
+    mults_reduced = mults.copy()
     for idt, t in enumerate(thresh):
-        mults[t] = mults[t][5:35,5:35]
-    n_illuminated_bins = mults[thresh[0]].shape[0]
+        mults_reduced[t] = mults[t][5:35,5:35]
+    n_illuminated_bins = mults_reduced[thresh[0]].shape[0]
     for idt, t in enumerate(thresh):
         for m in [0,1,2,3,4]:
-            m_counts[idt, m] = np.sum(mults[t] == m) / (n_illuminated_bins*n_illuminated_bins)
-            # m_counts[idt, m] = np.sum(ungrooved_mults_big[t] == m) / (24*24)
+            m_counts[idt, m] = np.sum(mults_reduced[t] == m) / (n_illuminated_bins*n_illuminated_bins)
+            # m_counts[idt, m] = np.sum(ungrooved_mults_reduced_big[t] == m) / (24*24)
         # m_counts[idt, 0] = 1 - sum(m_counts[idt,:])
-        m_counts[idt, 5] = np.sum(mults[t] > 4) / (n_illuminated_bins*n_illuminated_bins)
+        m_counts[idt, 5] = np.sum(mults_reduced[t] > 4) / (n_illuminated_bins*n_illuminated_bins)
     for multip_line, col in zip(np.transpose(m_counts[:,(0,-1)]), ['k','c']):
         ax1.semilogx(thresh, multip_line, color=col)
     for multip_line in np.transpose(m_counts[:,(1,2,3,4)]):
@@ -286,6 +287,7 @@ grooved_mapmt_side_all = pickle.load( open('pickles/new_allgroove_mults_0.25.pkl
 filtered_grooved_mapmt_side_all_mults = pickle.load( open('pickles/filtered_allgroove_mults_0.20.pkl', 'rb'))
 filtered_grooved_mapmt_side_half_mults = pickle.load( open('pickles/filtered_halfgroove_mults_0.20.pkl', 'rb'))
 filtered_nogrooved_mapmt_rachel_mults = pickle.load( open('pickles/filtered_nogroove_rachel_mults_0.20.pkl', 'rb'))
+filtered_nogrooved_mapmt_laura_mults = pickle.load( open('pickles/filtered_nogroove_laura_mults_0.20.pkl', 'rb'))
 grooved_mults = pickle.load( open('pickles/cent_grooved_mults.pkl', 'rb'))
 corner_grooved_mults = pickle.load( open('pickles/corn_ungrooved_mults.pkl', 'rb'))
 grooved_ref_mults = pickle.load( open('pickles/grooved_ref_mults.pkl', 'rb'))
