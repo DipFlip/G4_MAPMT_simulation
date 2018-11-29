@@ -192,12 +192,35 @@ def plot_mults(mults, title=None):
     ax.set_aspect('equal')
     # plt.xlim([34,50])
     # plt.ylim([34,50])
-    plt.xlim([16,32.5])
-    plt.ylim([16,32.5])
+    plt.xlim([18.25,30.25])
+    plt.ylim([18.25,30.25])
     if title is not None:
         plt.title(title)
     #plt.show()
     return fig, ax
+
+def plot_M1_many(mults_array):
+    fig1, ax1 = plt.subplots()
+    colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    color_choice = list(colors[i] for i in [0, 4, 9, 8, 7])
+    thresh = np.transpose(list(mults_array[1].keys()))
+    m_counts = np.zeros((len(thresh), len(mults_array)))
+    for idm, mults in enumerate(mults_array):
+        mults_reduced = mults.copy()
+        for idt, t in enumerate(thresh):
+            mults_reduced[t] = mults[t][5:35,5:35]
+        n_illuminated_bins = mults_reduced[thresh[0]].shape[0]
+        for idt, t in enumerate(thresh):
+            m_counts[idt, idm] = np.sum(mults_reduced[t] == 1) / (n_illuminated_bins*n_illuminated_bins)
+    for multip_line, col in zip(np.transpose(m_counts[:,:]), color_choice):
+        ax1.plot(thresh, multip_line, color=col)
+    ax1.legend(['Ungrooved','0.5 mm deep grooves,\n facing MAPMT', '0.5 mm deep grooves,\n facing away from MAPMT', 'Grooved all through'])
+    from matplotlib.ticker import ScalarFormatter
+    [ax.xaxis.set_major_formatter(ScalarFormatter()) for ax in [ax1]]
+    ax1.set_ylim([-0, 1])
+    [ax.set_xlabel('Threshold / arb. unit') for ax in [ax1]]
+    [ax.set_ylabel('$M = 1$ fraction') for ax in [ax1]]
+    plt.show()
 
 def plot_0_to_5(mults):
     fig1, ax1 = plt.subplots()
@@ -288,6 +311,8 @@ filtered_grooved_mapmt_side_all_mults = pickle.load( open('pickles/filtered_allg
 filtered_grooved_mapmt_side_half_mults = pickle.load( open('pickles/filtered_halfgroove_mults_0.20.pkl', 'rb'))
 filtered_nogrooved_mapmt_rachel_mults = pickle.load( open('pickles/filtered_nogroove_rachel_mults_0.20.pkl', 'rb'))
 filtered_nogrooved_mapmt_laura_mults = pickle.load( open('pickles/filtered_nogroove_laura_mults_0.20.pkl', 'rb'))
+filtered_nogrooved_mapmt_mults = pickle.load( open('pickles/filtered_nogroove_mults_0.20.pkl', 'rb'))
+filtered_topgrooved_mapmt_mults = pickle.load( open('pickles/filtered_topgroove_rachel_mults_0.20.pkl', 'rb'))
 grooved_mults = pickle.load( open('pickles/cent_grooved_mults.pkl', 'rb'))
 corner_grooved_mults = pickle.load( open('pickles/corn_ungrooved_mults.pkl', 'rb'))
 grooved_ref_mults = pickle.load( open('pickles/grooved_ref_mults.pkl', 'rb'))
