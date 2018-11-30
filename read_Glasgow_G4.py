@@ -3,21 +3,27 @@ import uproot as ur
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 import seaborn as sns
 import pickle
 
-n_bins = 194 #cover all area with 0.25 mm bins
+n_bins_whole = 194 #cover all area with 0.25 mm bins
 n_bins = 61 #cover 2*2 pixels with 0.2 mm bins
+bin_width = 0.2
 pixel_widths = [6.25, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.25]
 pixel_borders = np.cumsum(pixel_widths)
 # bin_widths = [1.25] + [1] * 46 + [1.25]
 bin_widths = [0.25] * n_bins #0.25 mm bins
-bin_widths = [0.2] * n_bins #0.2 mm bins around 2*2 pixels
+bin_widths = [bin_width] * n_bins #0.2 mm bins around 2*2 pixels
+bin_widths_whole = [0.25] * 194
 # bin_widths = [0.5] * 98 #0.5 mm bins
 bin_borders = np.cumsum(bin_widths)
+bin_borders_whole = np.cumsum(bin_widths_whole)
 bin_borders += 18.15 #to center around center pixels
 bin_list_with_zero = np.insert(bin_borders,0, 18.15)
+bin_list_with_zero_whole = np.insert(bin_borders_whole,0, 0)
 bin_centers = (bin_list_with_zero[1:] + bin_list_with_zero[:-1]) / 2
+bin_centers_whole = (bin_list_with_zero_whole[1:] + bin_list_with_zero_whole[:-1]) / 2
 
 def xy2pixel(x, y):
     """
@@ -38,12 +44,20 @@ def G4_coordinates2pixel(x,y):
     return xy2pixel(pixel_col, pixel_row)
 
 def G4_coordinate2_col_row(x,y):
-    """returns the column and row number"""
+    """returns the column and row number of area 2*2 pixels"""
     x += 24.25 #Shift so that 0,0 is in the lower left corner
     y += 24.25 #Shift so that 0,0 is in the lower left corner
     bin_col = np.searchsorted(bin_borders, x) #0 is the leftmost column
     bin_row = np.searchsorted(bin_borders, y) #0 is the lowest row
     return bin_col, bin_row
+
+def G4_coordinate2_col_row_whole(x,y):
+    """returns the column and row number of the whole MAPMT"""
+    x += 24.25 #Shift so that 0,0 is in the lower left corner
+    y += 24.25 #Shift so that 0,0 is in the lower left corner
+    bin_col = np.searchsorted(bin_borders_whole, x) #0 is the leftmost column
+    bin_row = np.searchsorted(bin_borders_whole, y) #0 is the lowest row
+    return bin_row, bin_col
 
 def get_scan_bin(x,y):
     """returns the bin that the light originates from (there are n_bins*n_bins bins)"""
@@ -124,9 +138,8 @@ def root_to_dataframe(vid_array, x_array, y_array, x_origin, y_origin, z_origin,
     dataframe['yo'] = flat_yo_list
     return dataframe
 
-def plot_light_cone_at_pos(x_pos, y_pos):
-    delta = 0.5 #mm
-    photons_counted = np.zeros((n_bins,n_bins))
+def calculate_light_cone_at_pos(x_pos, y_pos, delta=0.5):
+    photons_counted = np.zeros((194,194))
     for event in np.arange(total_number_events):
         if x_array[event].size > 0:
             for x, y, xo, yo, vid in zip(x_array[event], y_array[event], x_origin[event], y_origin[event], vid_array[event]):
@@ -134,9 +147,46 @@ def plot_light_cone_at_pos(x_pos, y_pos):
                 if vid == 2:
                     if x_pos-delta < xo + 24.25 < x_pos+delta:
                         if y_pos-delta < yo + 24.25 < y_pos+delta:
-                            photons_counted[G4_coordinate2_col_row(x,y)] += 1
+                            photons_counted[G4_coordinate2_col_row_whole(x,y)] += 1
                             # print(f"add photon to colrow {G4_coordinate2_col_row(xo,yo)} from xo {xo}, yo {yo}.")
     return photons_counted
+
+def plot_light_cone(light_cone, x, y, r, grooves=True):
+    rect = patches.Rectangle((x-0.5,y-0.5), 1, 1, fill=False, color='r', alpha=0.9, linewidth=1)
+    circle = plt.Circle((x, y), r, color='r', fill=False, alpha=0.6)
+
+    fig, ax = plt.subplots()
+    ax.pcolormesh(bin_centers_whole, bin_centers_whole, light_cone)
+    for pos in pixel_borders:
+        ax.axhline(pos, linestyle='-', color='k') # horizontal lines
+        ax.axvline(pos, linestyle='-', color='k') # vertical lines
+        if grooves:
+            ax.axhline(pos-0.1, linestyle='--', color='gray') # horizontal lines
+            ax.axvline(pos-0.1, linestyle='--', color='gray') # vertical lines
+            ax.axhline(pos+0.1, linestyle='--', color='gray') # horizontal lines
+            ax.axvline(pos+0.1, linestyle='--', color='gray') # vertical lines
+    ax.set_aspect('equal')
+    ax.add_artist(circle)
+    ax.add_patch(rect)
+    ax.set_xlabel('horizontal position / mm')
+    ax.set_ylabel('vertical position / mm')
+    ax.set_xlim([12.4, 30])
+    ax.set_ylim([12.4, 30])
+    #plt.show()
+    return fig, ax
+
+def save_figures():
+    fig, ax = plot_light_cone(lightcone_edge_plain, 23.65, 21.25, 3, grooves=False)
+    fig.savefig("output/lightcone_edge_plain.png")
+    fig, ax = plot_light_cone(lightcone_edge_half, 23.65, 21.25, 3) 
+    fig.savefig("output/lightcone_edge_half.png")
+    fig, ax = plot_light_cone(lightcone_edge_all, 23.65, 21.25, 3) 
+    fig.savefig("output/lightcone_edge_all.png")
+    fig, ax = plot_light_cone(lightcone_corner_all, 23.65, 23.65, 3) 
+    fig.savefig("output/lightcone_corner_all.png")
+    fig, ax = plot_light_cone(lightcone_corner_half, 23.65, 23.65, 3) 
+    fig.savefig("output/lightcone_corner_half.png")
+    
 #load the file
 if len(sys.argv) > 1:
     print(f"loading file {sys.argv[1]}")
@@ -150,10 +200,10 @@ if len(sys.argv) > 1:
 
 
 
-def plot_at_position(x, y):
+def plot_at_position(x, y, delta=0.5):
     phs = np.zeros(64)
     for pno in np.arange(1,65):
-        phs[pno-1] = df.ph[(df.xo.between(x-1,x+1)) & (df.yo.between(y-1,y+1)) & (df.pno == pno)].sum()
+        phs[pno-1] = df.ph[(df.xo.between(x-delta,x+delta)) & (df.yo.between(y-delta,y+delta)) & (df.pno == pno)].sum()
     phs = np.reshape(phs, (8,8))
     sns.heatmap(phs, annot=True, fmt='.0f')
     plt.show()
@@ -284,16 +334,21 @@ thresh3_old = np.arange(100,2001,100)
 ungrooved_mults = pickle.load( open('pickles/cent_ungrooved_mults.pkl', 'rb'))
 grooved_mapmt_side_half = pickle.load( open('pickles/new_halfgroove_mults_0.25.pkl', 'rb'))
 grooved_mapmt_side_all = pickle.load( open('pickles/new_allgroove_mults_0.25.pkl', 'rb'))
-filtered_grooved_mapmt_side_all_mults = pickle.load( open('pickles/filtered_allgroove_mults_0.20.pkl', 'rb'))
-filtered_grooved_mapmt_side_half_mults = pickle.load( open('pickles/filtered_halfgroove_mults_0.20.pkl', 'rb'))
-filtered_nogrooved_mapmt_rachel_mults = pickle.load( open('pickles/filtered_nogroove_rachel_mults_0.20.pkl', 'rb'))
-filtered_nogrooved_mapmt_laura_mults = pickle.load( open('pickles/filtered_nogroove_laura_mults_0.20.pkl', 'rb'))
+filtered_ungrooved_mapmt_mults = pickle.load( open('pickles/filtered_nogroove_mults_0.20.pkl', 'rb'))
+#filtered_grooved_mapmt_side_half_mults = pickle.load( open('pickles/filtered_halfgroove_mults_0.20.pkl', 'rb'))
+#filtered_nogrooved_mapmt_rachel_mults = pickle.load( open('pickles/filtered_nogroove_rachel_mults_0.20.pkl', 'rb'))
+#filtered_nogrooved_mapmt_laura_mults = pickle.load( open('pickles/filtered_nogroove_laura_mults_0.20.pkl', 'rb'))
 grooved_mults = pickle.load( open('pickles/cent_grooved_mults.pkl', 'rb'))
 corner_grooved_mults = pickle.load( open('pickles/corn_ungrooved_mults.pkl', 'rb'))
 grooved_ref_mults = pickle.load( open('pickles/grooved_ref_mults.pkl', 'rb'))
 ungrooved_ref_mults = pickle.load( open('pickles/ungrooved_ref_mults.pkl', 'rb'))
 grooved_ref_mults2 = pickle.load( open('pickles/grooved_ti_0.25_100_1000.pkl', 'rb'))
 ungrooved_ref_mults2 = pickle.load( open('pickles/ungrooved_ti_0.25_100_1000.pkl', 'rb'))
+lightcone_corner_all = pickle.load(open('pickles/light_cone_all_corner.pkl', 'rb'))
+lightcone_edge_all = pickle.load(open('pickles/light_cone_all_edge.pkl', 'rb'))
+lightcone_edge_half = pickle.load(open('pickles/light_cone_half_edge.pkl', 'rb'))
+lightcone_corner_half = pickle.load(open('pickles/light_cone_half_corner.pkl', 'rb'))
+lightcone_edge_plain = pickle.load(open('pickles/light_cone_plain_edge.pkl', 'rb'))
 
 
 # df = pickle.load( open('pickles/grooved_ref_df0.25.pkl', 'rb'))
