@@ -24,6 +24,7 @@ bin_list_with_zero = np.insert(bin_borders,0, 18.15)
 bin_list_with_zero_whole = np.insert(bin_borders_whole,0, 0)
 bin_centers = (bin_list_with_zero[1:] + bin_list_with_zero[:-1]) / 2
 bin_centers_whole = (bin_list_with_zero_whole[1:] + bin_list_with_zero_whole[:-1]) / 2
+z_bins = [0.25, 0.50, 0.75, 1]
 
 def xy2pixel(x, y):
     """
@@ -43,13 +44,16 @@ def G4_coordinates2pixel(x,y):
     pixel_row = np.searchsorted(pixel_borders, y) #0 is the lowest row
     return xy2pixel(pixel_col, pixel_row)
 
-def G4_coordinate2_col_row(x,y):
-    """returns the column and row number of area 2*2 pixels"""
+
+def G4_coordinate2_col_row(x,y, z):
+    """returns the column and row number and z bin"""
     x += 24.25 #Shift so that 0,0 is in the lower left corner
     y += 24.25 #Shift so that 0,0 is in the lower left corner
+    z += 0.5
     bin_col = np.searchsorted(bin_borders, x) #0 is the leftmost column
     bin_row = np.searchsorted(bin_borders, y) #0 is the lowest row
-    return bin_col, bin_row
+    z_bin = np.searchsorted(z_bins, z)
+    return bin_col, bin_row, z_bin
 
 def G4_coordinate2_col_row_whole(x,y):
     """returns the column and row number of the whole MAPMT"""
@@ -59,14 +63,15 @@ def G4_coordinate2_col_row_whole(x,y):
     bin_row = np.searchsorted(bin_borders_whole, y) #0 is the lowest row
     return bin_row, bin_col
 
-def get_scan_bin(x,y):
+def get_scan_bin(x,y,z):
     """returns the bin that the light originates from (there are n_bins*n_bins bins)"""
     x += 24.25 #Shift so that 0,0 is in the lower left corner
     y += 24.25 #Shift so that 0,0 is in the lower left corner
+    z += 0.5
     bin_col = np.searchsorted(bin_borders, x) #0 is the leftmost column
     bin_row = np.searchsorted(bin_borders, y) #0 is the lowest row
-    # return np.searchsorted(bin_borders, x) + n_bins*np.searchsorted(bin_borders, y) + 1
-    return (bin_col + n_bins*bin_row)
+    z_bin = np.searchsorted(z_bins, z)
+    return (bin_col + n_bins*bin_row), z_bin
 
 def is_in_groove(xo, yo, zo):
     xo += 24.25 #Shift so that 0,0 is in the lower left corner
@@ -107,7 +112,7 @@ def load_G4_root_file(file_to_load):
 def root_to_dataframe(vid_array, x_array, y_array, x_origin, y_origin, z_origin, total_number_events):
     #sum the photon counts in each pixel for every event
     print("Summing photons...")
-    photon_counts = np.zeros((n_bins*n_bins, 64)) #address by [event, pixel-1]
+    photon_counts = np.zeros((4, n_bins*n_bins, 64)) #address by [event, pixel-1] #4 for 4 z-bins
     #x_origin_bins = np.zeros((total_number_events, 64)) #address by [event, pixel-1]
     #y_origin_bins = np.zeros((total_number_events, 64)) #address by [event, pixel-1]
     for event in np.arange(total_number_events):
@@ -117,18 +122,22 @@ def root_to_dataframe(vid_array, x_array, y_array, x_origin, y_origin, z_origin,
                 if vid == 2:
                     # if not is_in_groove(xo, yo, zo):
                     pixel = G4_coordinates2pixel(x,y)
-                    bin_number = get_scan_bin(xo, yo)
+                    bin_number, z_bin = get_scan_bin(xo, yo, zo)
                     if  1 <= pixel <= 64:
-                        photon_counts[bin_number, pixel-1] += 1
+                        photon_counts[z_bin, bin_number, pixel-1] += 1
 
     # save as a dataframe
     print("Making dataframe...")
-    flat_photon_counts_list = np.asarray([item for sublist in photon_counts for item in sublist], dtype=np.int16)
-    flat_xo_list = np.tile(np.repeat(bin_centers,64),n_bins)
-    flat_yo_list = np.repeat(bin_centers,64*n_bins)
+    list_for_photons = []
+    for z_bin in [0,1,2,3]:
+        list_for_photons.extend([item for sublist in photon_counts[z_bin] for item in sublist])
+    flat_photon_counts_list = np.asanyarray(list_for_photons, dtype=np.int16)
+    flat_xo_list = np.tile(np.tile(np.repeat(bin_centers,64),n_bins), 4)
+    flat_yo_list = np.tile(np.repeat(bin_centers,64*n_bins), 4)
+    flat_zo_list = np.repeat(np.arange(4, dtype = np.uint8),n_bins*n_bins*64)
     # flat_xo_bin_list = np.asarray([item for sublist in x_origin_bins for item in sublist], dtype=np.uint8)
     # flat_yo_bin_list = np.asarray([item for sublist in y_origin_bins for item in sublist], dtype=np.uint8)
-    flat_pixel_list = np.tile(np.arange(1,65, dtype=np.uint8),n_bins*n_bins)
+    flat_pixel_list = np.tile(np.tile(np.arange(1,65, dtype=np.uint8),n_bins*n_bins), 4)
     # events = np.asarray([int(row / 64) for row in range(nrows*64)], dtype=np.uint16)
     dataframe = pd.DataFrame()
 
@@ -136,6 +145,7 @@ def root_to_dataframe(vid_array, x_array, y_array, x_origin, y_origin, z_origin,
     dataframe['ph'] = flat_photon_counts_list
     dataframe['xo'] = flat_xo_list
     dataframe['yo'] = flat_yo_list
+    dataframe['zo'] = flat_zo_list
     return dataframe
 
 def calculate_light_cone_at_pos(x_pos, y_pos, delta=0.5):
@@ -242,12 +252,35 @@ def plot_mults(mults, title=None):
     ax.set_aspect('equal')
     # plt.xlim([34,50])
     # plt.ylim([34,50])
-    plt.xlim([16,32.5])
-    plt.ylim([16,32.5])
+    plt.xlim([18.25,30.25])
+    plt.ylim([18.25,30.25])
     if title is not None:
         plt.title(title)
     #plt.show()
     return fig, ax
+
+def plot_M1_many(mults_array):
+    fig1, ax1 = plt.subplots()
+    colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    color_choice = list(colors[i] for i in [0, 4, 9, 8, 7])
+    thresh = np.transpose(list(mults_array[1].keys()))
+    m_counts = np.zeros((len(thresh), len(mults_array)))
+    for idm, mults in enumerate(mults_array):
+        mults_reduced = mults.copy()
+        for idt, t in enumerate(thresh):
+            mults_reduced[t] = mults[t][5:35,5:35]
+        n_illuminated_bins = mults_reduced[thresh[0]].shape[0]
+        for idt, t in enumerate(thresh):
+            m_counts[idt, idm] = np.sum(mults_reduced[t] == 1) / (n_illuminated_bins*n_illuminated_bins)
+    for multip_line, col in zip(np.transpose(m_counts[:,:]), color_choice):
+        ax1.plot(thresh, multip_line, color=col)
+    ax1.legend(['Ungrooved','0.5 mm deep grooves,\n facing MAPMT', '0.5 mm deep grooves,\n facing away from MAPMT', 'Grooved all through'])
+    from matplotlib.ticker import ScalarFormatter
+    [ax.xaxis.set_major_formatter(ScalarFormatter()) for ax in [ax1]]
+    ax1.set_ylim([-0, 1])
+    [ax.set_xlabel('Threshold / arb. unit') for ax in [ax1]]
+    [ax.set_ylabel('$M = 1$ fraction') for ax in [ax1]]
+    plt.show()
 
 def plot_0_to_5(mults):
     fig1, ax1 = plt.subplots()
@@ -334,10 +367,19 @@ thresh3_old = np.arange(100,2001,100)
 ungrooved_mults = pickle.load( open('pickles/cent_ungrooved_mults.pkl', 'rb'))
 grooved_mapmt_side_half = pickle.load( open('pickles/new_halfgroove_mults_0.25.pkl', 'rb'))
 grooved_mapmt_side_all = pickle.load( open('pickles/new_allgroove_mults_0.25.pkl', 'rb'))
+<<<<<<< HEAD
 filtered_ungrooved_mapmt_mults = pickle.load( open('pickles/filtered_nogroove_mults_0.20.pkl', 'rb'))
 #filtered_grooved_mapmt_side_half_mults = pickle.load( open('pickles/filtered_halfgroove_mults_0.20.pkl', 'rb'))
 #filtered_nogrooved_mapmt_rachel_mults = pickle.load( open('pickles/filtered_nogroove_rachel_mults_0.20.pkl', 'rb'))
 #filtered_nogrooved_mapmt_laura_mults = pickle.load( open('pickles/filtered_nogroove_laura_mults_0.20.pkl', 'rb'))
+=======
+filtered_grooved_mapmt_side_all_mults = pickle.load( open('pickles/filtered_allgroove_mults_0.20.pkl', 'rb'))
+filtered_grooved_mapmt_side_half_mults = pickle.load( open('pickles/filtered_halfgroove_mults_0.20.pkl', 'rb'))
+filtered_nogrooved_mapmt_rachel_mults = pickle.load( open('pickles/filtered_nogroove_rachel_mults_0.20.pkl', 'rb'))
+filtered_nogrooved_mapmt_laura_mults = pickle.load( open('pickles/filtered_nogroove_laura_mults_0.20.pkl', 'rb'))
+filtered_nogrooved_mapmt_mults = pickle.load( open('pickles/filtered_nogroove_mults_0.20.pkl', 'rb'))
+filtered_topgrooved_mapmt_mults = pickle.load( open('pickles/filtered_topgroove_rachel_mults_0.20.pkl', 'rb'))
+>>>>>>> 6e8d53ed9f1e06073d8fe6da7199fb6c803b5596
 grooved_mults = pickle.load( open('pickles/cent_grooved_mults.pkl', 'rb'))
 corner_grooved_mults = pickle.load( open('pickles/corn_ungrooved_mults.pkl', 'rb'))
 grooved_ref_mults = pickle.load( open('pickles/grooved_ref_mults.pkl', 'rb'))
