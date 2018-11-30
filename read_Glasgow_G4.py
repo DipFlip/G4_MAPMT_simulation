@@ -231,20 +231,21 @@ def plot_max_at_each_position():
     plt.show()
     return maxes
 
-def calculate_multiplicity_at_each_position(threshold):
+def calculate_multiplicity_at_each_position(threshold, z_to_look_at = [0,1,2,3]):
     """returns a 2D array of multiplicities for each position"""
-    mults = np.zeros((n_bins,n_bins))
+    mults = np.zeros((n_bins,n_bins, 4))
     # mults = np.zeros((98,98))
     for xid, xbin in enumerate(bin_centers):
         for yid, ybin in enumerate(bin_centers):
-            mults[yid, xid] = df.ph[(df.xo == xbin) & (df.yo == ybin) & (df.ph > threshold)].count()
+            for zid, zbin in enumerate(z_to_look_at):
+                mults[yid, xid, zbin] = df.ph[(df.xo == xbin) & (df.yo == ybin) & (df.zo == zbin) & (df.ph > threshold)].count()
     return mults
 
-def plot_mults(mults, title=None):
+def plot_mults(mults, zbin, title=None):
     cmap = plt.cm.terrain
     cmap.set_under(color='white')
     fig, ax = plt.subplots()
-    plt.contourf(mults, levels=[-0.5,0.5,1.5,2.5,3.5,4.5], vmin=0.01, extent=[bin_centers.min(),bin_centers.max(),bin_centers.min(),bin_centers.max()], cmap=cmap)
+    plt.contourf(mults[:,:,zbin], levels=[-0.5,0.5,1.5,2.5,3.5,4.5], vmin=0.01, extent=[bin_centers.min(),bin_centers.max(),bin_centers.min(),bin_centers.max()], cmap=cmap)
     plt.colorbar(ticks=[0,1,2,3,4], label=f"Multiplicity")
     for pos in pixel_borders:
         ax.axhline(pos, linestyle='-', color='k') # horizontal lines
@@ -282,24 +283,23 @@ def plot_M1_many(mults_array):
     [ax.set_ylabel('$M = 1$ fraction') for ax in [ax1]]
     plt.show()
 
-def plot_0_to_5(mults):
+def plot_0_to_5(mults, z_bin):
     fig1, ax1 = plt.subplots()
     fig2, ax2 = plt.subplots()
     thresh = np.transpose(list(mults.keys()))
-    m_counts = np.zeros((len(thresh),6))
+    m_counts = np.zeros((len(thresh),6,4))
     mults_reduced = mults.copy()
     for idt, t in enumerate(thresh):
-        mults_reduced[t] = mults[t][5:35,5:35]
+        mults_reduced[t] = mults[t][5:35,5:35,:]
     n_illuminated_bins = mults_reduced[thresh[0]].shape[0]
     for idt, t in enumerate(thresh):
-        for m in [0,1,2,3,4]:
-            m_counts[idt, m] = np.sum(mults_reduced[t] == m) / (n_illuminated_bins*n_illuminated_bins)
-            # m_counts[idt, m] = np.sum(ungrooved_mults_reduced_big[t] == m) / (24*24)
-        # m_counts[idt, 0] = 1 - sum(m_counts[idt,:])
-        m_counts[idt, 5] = np.sum(mults_reduced[t] > 4) / (n_illuminated_bins*n_illuminated_bins)
-    for multip_line, col in zip(np.transpose(m_counts[:,(0,-1)]), ['k','c']):
+        for z in [0,1,2,3]:
+            for m in [0,1,2,3,4]:
+                m_counts[idt, m, z] = np.sum(mults_reduced[t][:,:,z] == m) / (n_illuminated_bins*n_illuminated_bins)
+            m_counts[idt, 5, z] = np.sum(mults_reduced[t][:,:,z] > 4) / (n_illuminated_bins*n_illuminated_bins)
+    for multip_line, col in zip(np.transpose(m_counts[:,(0,-1), z_bin]), ['k','c']):
         ax1.semilogx(thresh, multip_line, color=col)
-    for multip_line in np.transpose(m_counts[:,(1,2,3,4)]):
+    for multip_line in np.transpose(m_counts[:,(1,2,3,4), z_bin]):
         ax2.semilogx(thresh, multip_line)
     ax1.legend(['$M = 0$','$M > 4$'])
     ax2.legend(['$M = 1$','$M = 2$','$M = 3$','$M = 4$'])
@@ -347,7 +347,7 @@ def make_dict_of_mults():
     new_mults_dict = {el:[] for el in t_tot2}
     for t in t_tot2:
         print(t)
-        new_mults_dict[t] = calculate_multiplicity_at_each_position(t)
+        new_mults_dict[t] = calculate_multiplicity_at_each_position(t, z_to_look_at = [0,1,2,3])
     return new_mults_dict
 
 def draw_all_mult_maps():
@@ -367,19 +367,14 @@ thresh3_old = np.arange(100,2001,100)
 ungrooved_mults = pickle.load( open('pickles/cent_ungrooved_mults.pkl', 'rb'))
 grooved_mapmt_side_half = pickle.load( open('pickles/new_halfgroove_mults_0.25.pkl', 'rb'))
 grooved_mapmt_side_all = pickle.load( open('pickles/new_allgroove_mults_0.25.pkl', 'rb'))
-<<<<<<< HEAD
+
 filtered_ungrooved_mapmt_mults = pickle.load( open('pickles/filtered_nogroove_mults_0.20.pkl', 'rb'))
-#filtered_grooved_mapmt_side_half_mults = pickle.load( open('pickles/filtered_halfgroove_mults_0.20.pkl', 'rb'))
-#filtered_nogrooved_mapmt_rachel_mults = pickle.load( open('pickles/filtered_nogroove_rachel_mults_0.20.pkl', 'rb'))
-#filtered_nogrooved_mapmt_laura_mults = pickle.load( open('pickles/filtered_nogroove_laura_mults_0.20.pkl', 'rb'))
-=======
 filtered_grooved_mapmt_side_all_mults = pickle.load( open('pickles/filtered_allgroove_mults_0.20.pkl', 'rb'))
 filtered_grooved_mapmt_side_half_mults = pickle.load( open('pickles/filtered_halfgroove_mults_0.20.pkl', 'rb'))
 filtered_nogrooved_mapmt_rachel_mults = pickle.load( open('pickles/filtered_nogroove_rachel_mults_0.20.pkl', 'rb'))
 filtered_nogrooved_mapmt_laura_mults = pickle.load( open('pickles/filtered_nogroove_laura_mults_0.20.pkl', 'rb'))
 filtered_nogrooved_mapmt_mults = pickle.load( open('pickles/filtered_nogroove_mults_0.20.pkl', 'rb'))
 filtered_topgrooved_mapmt_mults = pickle.load( open('pickles/filtered_topgroove_rachel_mults_0.20.pkl', 'rb'))
->>>>>>> 6e8d53ed9f1e06073d8fe6da7199fb6c803b5596
 grooved_mults = pickle.load( open('pickles/cent_grooved_mults.pkl', 'rb'))
 corner_grooved_mults = pickle.load( open('pickles/corn_ungrooved_mults.pkl', 'rb'))
 grooved_ref_mults = pickle.load( open('pickles/grooved_ref_mults.pkl', 'rb'))
@@ -391,6 +386,7 @@ lightcone_edge_all = pickle.load(open('pickles/light_cone_all_edge.pkl', 'rb'))
 lightcone_edge_half = pickle.load(open('pickles/light_cone_half_edge.pkl', 'rb'))
 lightcone_corner_half = pickle.load(open('pickles/light_cone_half_corner.pkl', 'rb'))
 lightcone_edge_plain = pickle.load(open('pickles/light_cone_plain_edge.pkl', 'rb'))
+zbinned_mults = pickle.load(open('pickles/S3_m_counts_t1500_reduced_moreTs.pkl', 'rb'))
 
 
 # df = pickle.load( open('pickles/grooved_ref_df0.25.pkl', 'rb'))
