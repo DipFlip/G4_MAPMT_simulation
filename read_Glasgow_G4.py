@@ -18,6 +18,7 @@ bin_borders = np.cumsum(bin_widths)
 bin_borders += 18.15 #to center around center pixels
 bin_list_with_zero = np.insert(bin_borders,0, 18.15)
 bin_centers = (bin_list_with_zero[1:] + bin_list_with_zero[:-1]) / 2
+z_bins = [0.25, 0.50, 0.75, 1]
 
 def xy2pixel(x, y):
     """
@@ -37,22 +38,25 @@ def G4_coordinates2pixel(x,y):
     pixel_row = np.searchsorted(pixel_borders, y) #0 is the lowest row
     return xy2pixel(pixel_col, pixel_row)
 
-def G4_coordinate2_col_row(x,y):
-    """returns the column and row number"""
+def G4_coordinate2_col_row(x,y, z):
+    """returns the column and row number and z bin"""
     x += 24.25 #Shift so that 0,0 is in the lower left corner
     y += 24.25 #Shift so that 0,0 is in the lower left corner
+    z += 0.5
     bin_col = np.searchsorted(bin_borders, x) #0 is the leftmost column
     bin_row = np.searchsorted(bin_borders, y) #0 is the lowest row
-    return bin_col, bin_row
+    z_bin = np.searchsorted(z_bins, z)
+    return bin_col, bin_row, z_bin
 
-def get_scan_bin(x,y):
+def get_scan_bin(x,y,z):
     """returns the bin that the light originates from (there are n_bins*n_bins bins)"""
     x += 24.25 #Shift so that 0,0 is in the lower left corner
     y += 24.25 #Shift so that 0,0 is in the lower left corner
+    z += 0.5
     bin_col = np.searchsorted(bin_borders, x) #0 is the leftmost column
     bin_row = np.searchsorted(bin_borders, y) #0 is the lowest row
-    # return np.searchsorted(bin_borders, x) + n_bins*np.searchsorted(bin_borders, y) + 1
-    return (bin_col + n_bins*bin_row)
+    z_bin = np.searchsorted(z_bins, z)
+    return (bin_col + n_bins*bin_row), z_bin
 
 def is_in_groove(xo, yo, zo):
     xo += 24.25 #Shift so that 0,0 is in the lower left corner
@@ -93,7 +97,7 @@ def load_G4_root_file(file_to_load):
 def root_to_dataframe(vid_array, x_array, y_array, x_origin, y_origin, z_origin, total_number_events):
     #sum the photon counts in each pixel for every event
     print("Summing photons...")
-    photon_counts = np.zeros((n_bins*n_bins, 64)) #address by [event, pixel-1]
+    photon_counts = np.zeros((4, n_bins*n_bins, 64)) #address by [event, pixel-1] #4 for 4 z-bins
     #x_origin_bins = np.zeros((total_number_events, 64)) #address by [event, pixel-1]
     #y_origin_bins = np.zeros((total_number_events, 64)) #address by [event, pixel-1]
     for event in np.arange(total_number_events):
@@ -103,18 +107,22 @@ def root_to_dataframe(vid_array, x_array, y_array, x_origin, y_origin, z_origin,
                 if vid == 2:
                     # if not is_in_groove(xo, yo, zo):
                     pixel = G4_coordinates2pixel(x,y)
-                    bin_number = get_scan_bin(xo, yo)
+                    bin_number, z_bin = get_scan_bin(xo, yo, zo)
                     if  1 <= pixel <= 64:
-                        photon_counts[bin_number, pixel-1] += 1
+                        photon_counts[z_bin, bin_number, pixel-1] += 1
 
     # save as a dataframe
     print("Making dataframe...")
-    flat_photon_counts_list = np.asarray([item for sublist in photon_counts for item in sublist], dtype=np.int16)
-    flat_xo_list = np.tile(np.repeat(bin_centers,64),n_bins)
-    flat_yo_list = np.repeat(bin_centers,64*n_bins)
+    list_for_photons = []
+    for z_bin in [0,1,2,3]:
+        list_for_photons.extend([item for sublist in photon_counts[z_bin] for item in sublist])
+    flat_photon_counts_list = np.asanyarray(list_for_photons, dtype=np.int16)
+    flat_xo_list = np.tile(np.tile(np.repeat(bin_centers,64),n_bins), 4)
+    flat_yo_list = np.tile(np.repeat(bin_centers,64*n_bins), 4)
+    flat_zo_list = np.repeat(np.arange(4, dtype = np.uint8),n_bins*n_bins*64)
     # flat_xo_bin_list = np.asarray([item for sublist in x_origin_bins for item in sublist], dtype=np.uint8)
     # flat_yo_bin_list = np.asarray([item for sublist in y_origin_bins for item in sublist], dtype=np.uint8)
-    flat_pixel_list = np.tile(np.arange(1,65, dtype=np.uint8),n_bins*n_bins)
+    flat_pixel_list = np.tile(np.tile(np.arange(1,65, dtype=np.uint8),n_bins*n_bins), 4)
     # events = np.asarray([int(row / 64) for row in range(nrows*64)], dtype=np.uint16)
     dataframe = pd.DataFrame()
 
@@ -122,6 +130,7 @@ def root_to_dataframe(vid_array, x_array, y_array, x_origin, y_origin, z_origin,
     dataframe['ph'] = flat_photon_counts_list
     dataframe['xo'] = flat_xo_list
     dataframe['yo'] = flat_yo_list
+    dataframe['zo'] = flat_zo_list
     return dataframe
 
 def plot_light_cone_at_pos(x_pos, y_pos):
